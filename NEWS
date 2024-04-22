@@ -1,6 +1,36 @@
-# 1.5.2
+# 1.7.1
+
+* Handle numbering level definitions without an explicit format.
+
+* Switch the precedence of numbering properties in paragraph properties and the
+  numbering in paragraph styles so that the numbering properties in paragraph
+  properties takes precedence.
+
+# 1.7.0
+
+* Support attributes in HTML paths in style mappings.
+
+* Improve error message when failing to find the body element in a document.
+
+* Add support for the strict document format.
+
+# 1.6.0
 
 * Add transformDocument to the TypeScript declarations.
+
+* Support merged paragraphs when revisions are tracked.
+
+* Use xmldom instead of sax to parse XML documents. This should remove the need
+  to polyfill stream in the browser.
+
+* Adjust the internal implementation to remove the use of Buffer on the critical
+  path, and provide APIs to read images and documents with embedded style maps
+  without using Buffer. This should remove the need to polyfill Buffer in the
+  browser. Since TextDecoder is now used, the minimum version of node.js is now
+  v12.
+
+* Remove the use of the util module. This should remove the need to polyfill
+  util in the browser.
 
 # 1.5.1
 

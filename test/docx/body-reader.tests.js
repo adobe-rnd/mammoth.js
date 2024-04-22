@@ -19,29 +19,35 @@ var isText = documentMatchers.isText;
 var isTable = documentMatchers.isTable;
 var isRow = documentMatchers.isRow;
 
-var createBodyReader = require("../../lib/docx/body-reader").createBodyReader;
 var _readNumberingProperties = require("../../lib/docx/body-reader")._readNumberingProperties;
 var documents = require("../../lib/documents");
 var xml = require("../../lib/xml");
 var XmlElement = xml.Element;
-var defaultNumbering = require("../../lib/docx/numbering-xml").defaultNumbering;
 var Relationships = require("../../lib/docx/relationships-reader").Relationships;
 var Styles = require("../../lib/docx/styles-reader").Styles;
 var warning = require("../../lib/results").warning;
 
 var testing = require("../testing");
 var test = require("../test")(module);
+var createBodyReaderForTests = require("./testing").createBodyReaderForTests;
 var createFakeDocxFile = testing.createFakeDocxFile;
 
 function readXmlElement(element, options) {
-    options = Object.create(options || {});
-    options.styles = options.styles || new Styles({}, {});
-    options.numbering = options.numbering || defaultNumbering;
-    return createBodyReader(options).readXmlElement(element);
+    return createBodyReaderForTests(options).readXmlElement(element);
+}
+
+function readXmlElements(element, options) {
+    return createBodyReaderForTests(options).readXmlElements(element);
 }
 
 function readXmlElementValue(element, options) {
     var result = readXmlElement(element, options);
+    assert.deepEqual(result.messages, []);
+    return result.value;
+}
+
+function readXmlElementsValue(elements, options) {
+    var result = readXmlElements(elements, options);
     assert.deepEqual(result.messages, []);
     return result.value;
 }
@@ -165,7 +171,22 @@ test("paragraph has numbering properties from paragraph properties if present", 
     assert.deepEqual(paragraph.numbering, {level: "1", isOrdered: true});
 });
 
-test("numbering on paragraph style takes precedence over numPr", function() {
+test("paragraph has numbering from paragraph style if present", function() {
+    var propertiesXml = new XmlElement("w:pPr", {}, [
+        new XmlElement("w:pStyle", {"w:val": "List"})
+    ]);
+    var paragraphXml = new XmlElement("w:p", {}, [propertiesXml]);
+
+    var numbering = new NumberingMap({
+        findLevelByParagraphStyleId: {"List": {isOrdered: true, level: "1"}}
+    });
+    var styles = new Styles({"List": {name: "List"}}, {});
+
+    var paragraph = readXmlElementValue(paragraphXml, {numbering: numbering, styles: styles});
+    assert.deepEqual(paragraph.numbering, {level: "1", isOrdered: true});
+});
+
+test("numbering properties in paragraph properties takes precedence over numbering in paragraph style", function() {
     var numberingPropertiesXml = new XmlElement("w:numPr", {}, [
         new XmlElement("w:ilvl", {"w:val": "1"}),
         new XmlElement("w:numId", {"w:val": "42"})
@@ -177,7 +198,8 @@ test("numbering on paragraph style takes precedence over numPr", function() {
     var paragraphXml = new XmlElement("w:p", {}, [propertiesXml]);
 
     var numbering = new NumberingMap({
-        findLevelByParagraphStyleId: {"List": {isOrdered: true, level: "1"}}
+        findLevel: {"42": {"1": {isOrdered: true, level: "1"}}},
+        findLevelByParagraphStyleId: {"List": {isOrdered: true, level: "2"}}
     });
     var styles = new Styles({"List": {name: "List"}}, {});
 
@@ -223,6 +245,57 @@ test("numbering properties are ignored if w:numId is missing", function() {
 
     var numberingLevel = _readNumberingProperties(null, numberingPropertiesXml, numbering);
     assert.equal(numberingLevel, null);
+});
+
+test("content of deleted paragraph is prepended to next paragraph", function() {
+    var styles = new Styles(
+        {
+            "Heading1": {name: "Heading 1"},
+            "Heading2": {name: "Heading 2"}
+        },
+        {}
+    );
+    var bodyXml = [
+        new XmlElement("w:p", {}, [
+            new XmlElement("w:pPr", {}, [
+                new XmlElement("w:pStyle", {"w:val": "Heading1"}, []),
+                new XmlElement("w:rPr", {}, [
+                    new XmlElement("w:del")
+                ])
+            ]),
+            runOfText("One")
+        ]),
+        new XmlElement("w:p", {}, [
+            new XmlElement("w:pPr", {}, [
+                new XmlElement("w:pStyle", {"w:val": "Heading2"}, [])
+            ]),
+            runOfText("Two")
+        ]),
+        // Include a second paragraph that isn't deleted to ensure we only add
+        // the deleted paragraph contents once.
+        new XmlElement("w:p", {}, [
+            runOfText("Three")
+        ])
+    ];
+
+    var result = readXmlElementsValue(bodyXml, {styles: styles});
+
+    assertThat(result, contains(
+        hasProperties({
+            type: documents.types.paragraph,
+            styleId: "Heading2",
+            children: contains(
+                documents.run([documents.text("One")]),
+                documents.run([documents.text("Two")])
+            )
+        }),
+        hasProperties({
+            type: documents.types.paragraph,
+            children: contains(
+                documents.run([documents.text("Three")])
+            )
+        })
+    ));
 });
 
 test("complex fields", (function() {
