@@ -186,6 +186,21 @@ test("paragraph has numbering from paragraph style if present", function() {
     assert.deepEqual(paragraph.numbering, {level: "1", isOrdered: true});
 });
 
+test("paragraph can have top and border ", function() {
+    var propertiesXml = new XmlElement("w:pPr", {}, [
+        new XmlElement("w:pBdr", {}, [
+            new XmlElement("w:top", {"w:val": "single",  "w:sz": "6", "w:space": "1", "w:color": "auto"}, []),
+            new XmlElement("w:bottom", {"w:val": "single",  "w:sz": "5", "w:space": "2", "w:color": "red"}, [])
+        ])
+    ]);
+    var paragraphXml = new XmlElement("w:p", {}, [propertiesXml]);
+    var paragraph = readXmlElementValue(paragraphXml);
+    assert.deepEqual(paragraph.border, {
+        top: {type: "single", size: 6, space: 1, color: "auto"},
+        bottom: {type: "single", size: 5, space: 2, color: "red"}
+    });
+});
+
 test("numbering properties in paragraph properties takes precedence over numbering in paragraph style", function() {
     var numberingPropertiesXml = new XmlElement("w:numPr", {}, [
         new XmlElement("w:ilvl", {"w:val": "1"}),
